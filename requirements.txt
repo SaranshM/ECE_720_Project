@@ -7,4 +7,5 @@ xgboost
 lightgbm
 catboost
 dataclasses
+dill
 #-e .
