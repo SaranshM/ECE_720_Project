@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 # temp
 from src.components.data_transformation import DataTransformation
+from src.components.model_trainer import ModelTrainer
 
 @dataclass
 class DataIngestionConfig:
@@ -19,6 +20,31 @@ class DataIngestionConfig:
 class DataIngestion:
     def __init__(self):
         self.ingestion_config = DataIngestionConfig()
+    
+    def calculate_iqr_outliers(self, data, feature):
+        Q1 = data[feature].quantile(0.25)
+        Q3 = data[feature].quantile(0.75)
+        IQR = Q3 - Q1
+        lower_bound = Q1 - 1.5 * IQR
+        upper_bound = Q3 + 1.5 * IQR
+        return lower_bound, upper_bound
+    
+    def remove_outliers(self, df):
+        outliers_indices = []
+
+        for feature in df.columns:
+            if df[feature].dtype in ['float64', 'int64']:
+                lower_bound, upper_bound = self.calculate_iqr_outliers(df, feature)
+                feature_outliers = df[(df[feature] < lower_bound) | (df[feature] > upper_bound)].index
+                outliers_indices.extend(feature_outliers)
+
+        # Determine which rows have outliers in multiple columns
+        from collections import Counter
+        outlier_counts = Counter(outliers_indices)
+        multiple_outliers = [k for k, v in outlier_counts.items() if v > 1]
+
+        df = df.drop(multiple_outliers)
+        return df
     
     def initiate_data_ingestion(self):
         logging.info("Data ingestion started")
@@ -63,6 +89,8 @@ class DataIngestion:
 
             df.rename(columns = new_column_names, inplace = True)
 
+            df = self.remove_outliers(df)
+
             logging.info("Initiating train-test split")
             train_set, test_set = train_test_split(df, random_state = 42, test_size = 0.15)
 
@@ -84,5 +112,8 @@ if __name__ == "__main__":
 
     data_transformation = DataTransformation()
     train_arr, test_arr, preprocessor_file_path = data_transformation.initiate_data_transformation(train_data, test_data)
+
+    model_trainer = ModelTrainer()
+    model_trainer.initiate_model_trainer(train_arr, test_arr, preprocessor_file_path)
 
 
